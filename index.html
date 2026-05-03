@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login con Supabase</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            width: 300px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #218838;
+        }
+        .error {
+            color: red;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        .toggle {
+            text-align: center;
+            margin-top: 15px;
+            cursor: pointer;
+            color: #007bff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2 id="formTitle">Iniciar Sesión</h2>
+        <input type="email" id="email" placeholder="Correo electrónico">
+        <input type="password" id="password" placeholder="Contraseña">
+        <button id="submitBtn">Ingresar</button>
+        <div id="message" class="error"></div>
+        <div class="toggle" id="toggleForm">¿No tienes cuenta? Regístrate</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        // Credenciales de Supabase
+        const SUPABASE_URL = 'https://yeemzdjccdhhwgqhylkw.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_I3BGwQddq7om9hu7T86kcg_yIiZiAc7';
+        
+        // Inicializar Supabase
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        let isLogin = true;
+        
+        const formTitle = document.getElementById('formTitle');
+        const submitBtn = document.getElementById('submitBtn');
+        const toggleText = document.getElementById('toggleForm');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const messageDiv = document.getElementById('message');
+        
+        // Función para mostrar mensajes
+        function showMessage(text, isError = true) {
+            messageDiv.textContent = text;
+            messageDiv.className = isError ? 'error' : 'success';
+            setTimeout(() => {
+                messageDiv.textContent = '';
+            }, 3000);
+        }
+        
+        // Función para login
+        async function login(email, password) {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email: email,
+                password: password
+            });
+            
+            if (error) {
+                showMessage('Error: ' + error.message);
+                return false;
+            }
+            
+            showMessage('¡Login exitoso! Bienvenido ' + data.user.email, false);
+            // Aquí puedes redirigir a otra página
+            setTimeout(() => {
+                // window.location.href = 'dashboard.html';
+                console.log('Usuario autenticado:', data.user);
+            }, 1500);
+            return true;
+        }
+        
+        // Función para registro
+        async function register(email, password) {
+            const { data, error } = await supabase.auth.signUp({
+                email: email,
+                password: password
+            });
+            
+            if (error) {
+                showMessage('Error: ' + error.message);
+                return false;
+            }
+            
+            showMessage('¡Registro exitoso! Revisa tu correo para confirmar.', false);
+            return true;
+        }
+        
+        // Manejar el envío del formulario
+        submitBtn.addEventListener('click', async () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            
+            if (!email || !password) {
+                showMessage('Por favor completa todos los campos');
+                return;
+            }
+            
+            if (password.length < 6) {
+                showMessage('La contraseña debe tener al menos 6 caracteres');
+                return;
+            }
+            
+            if (isLogin) {
+                await login(email, password);
+            } else {
+                await register(email, password);
+            }
+        });
+        
+        // Alternar entre login y registro
+        toggleText.addEventListener('click', () => {
+            isLogin = !isLogin;
+            if (isLogin) {
+                formTitle.textContent = 'Iniciar Sesión';
+                submitBtn.textContent = 'Ingresar';
+                toggleText.textContent = '¿No tienes cuenta? Regístrate';
+            } else {
+                formTitle.textContent = 'Registro';
+                submitBtn.textContent = 'Registrarse';
+                toggleText.textContent = '¿Ya tienes cuenta? Inicia Sesión';
+            }
+            messageDiv.textContent = '';
+        });
+        
+        // Permitir enviar con Enter
+        passwordInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitBtn.click();
+            }
+        });
+    </script>
+</body>
+</html>
+
+-- En el SQL Editor de Supabase, crea una tabla de perfiles (opcional)
+CREATE TABLE IF NOT EXISTS public.profiles (
+    id UUID REFERENCES auth.users ON DELETE CASCADE PRIMARY KEY,
+    email TEXT,
+    full_name TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Trigger para crear perfil automáticamente al registrarse
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.profiles (id, email)
+    VALUES (NEW.id, NEW.email);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- Habilitar RLS en la tabla profiles
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Política para que los usuarios vean solo su propio perfil
+CREATE POLICY "Users can view own profile"
+    ON public.profiles FOR SELECT
+    USING (auth.uid() = id);
+
+-- Política para que los usuarios actualicen su propio perfil
+CREATE POLICY "Users can update own profile"
+    ON public.profiles FOR UPDATE
+    USING (auth.uid() = id);
+
+// Agrega esta función para verificar la sesión al cargar la página
+async function checkSession() {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    if (session) {
+        console.log('Usuario ya autenticado:', session.user);
+        showMessage('Sesión activa: ' + session.user.email, false);
+        // Redirigir o mostrar contenido protegido
+    }
+}
+
+// Escuchar cambios en la autenticación
+supabase.auth.onAuthStateChange((event, session) => {
+    console.log('Auth event:', event, session);
+    
+    if (event === 'SIGNED_IN') {
+        console.log('Usuario ha iniciado sesión');
+    } else if (event === 'SIGNED_OUT') {
+        console.log('Usuario ha cerrado sesión');
+        showMessage('Sesión cerrada');
+    }
+});
+
+// Llamar al cargar la página
+checkSession();
+
+async function logout() {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+        showMessage('Error al cerrar sesión: ' + error.message);
+    } else {
+        showMessage('Sesión cerrada correctamente', false);
+    }
+}
+
+// Agrega un botón de logout si es necesario
+// <button onclick="logout()">Cerrar Sesión</button>
